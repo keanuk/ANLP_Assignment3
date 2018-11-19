@@ -3,7 +3,11 @@ from math import log,sqrt
 import operator
 from nltk.stem import *
 from nltk.stem.porter import *
+from load_map import *
 import matplotlib.pyplot as plt
+import numpy as np
+from math import log;
+from pylab import mean;
 
 STEMMER = PorterStemmer()
 
@@ -39,15 +43,39 @@ def PMI(c_xy, c_x, c_y, N):
   :param N: total observation count
   :rtype: float
   :return: the pmi value
-
+  
   '''
-  return 0 # you need to fix this
+  return log((N * c_xy) / (c_x * c_y), 2)
 
 #Do a simple error check using value computed by hand
 if(PMI(2,4,3,12) != 1): # these numbers are from our y,z example
     print("Warning: PMI is incorrectly defined")
 else:
     print("PMI check passed")
+
+def TF(c_xy):
+    if (c_xy != 0):
+        return 1 + log(c_xy, 10)
+    else:
+        return 0
+
+def IDF(df, N):
+    return log((N / df))
+
+def TFIDF(tf, idf):
+    return tf * idf
+
+def cos_sim(v0,v1):
+  '''Compute the cosine similarity between two sparse vectors.
+
+  :type v0: dict
+  :type v1: dict
+  :param v0: first sparse vector
+  :param v1: second sparse vector
+  :rtype: float
+  :return: cosine between v0 and v1
+  '''
+  return np.dot(v0, v1) / (np.linalg.norm(v1) * np.linalg.norm(v0))
 
 def cos_sim(v0,v1):
   '''Compute the cosine similarity between two sparse vectors.
@@ -182,3 +210,37 @@ c_sims = {(wid0,wid1): cos_sim(vectors[wid0],vectors[wid1]) for (wid0,wid1) in w
 
 print("Sort by cosine similarity")
 print_sorted_pairs(c_sims, o_counts)
+
+def dict2Vect(wDict):
+    v = []
+    lastKey = 0
+    for key, val in wDict.items():
+        if(key == lastKey + 1):
+            v.append(val)
+        else:
+            for i in range(key - lastKey):
+                v.append(0)
+            v.append(val)
+        lastKey = key
+    print("Finished Converting")
+    return v
+
+
+def wordCompare():
+    v0 = dict2Vect(co_counts[word2wid['@justinbieber']])
+    v1 = dict2Vect(co_counts[word2wid['love']])
+    return cos_sim(v0, v1)
+
+
+print("Cosine similarity: ", wordCompare())
+
+targetid = word2wid[target]
+posTFIDFList = []
+
+tcoDict = co_counts[targetid]
+tco = tcoDict[word2wid[pos]]
+posPMIs.append(PMI(tco, o_counts[targetid], o_counts[word2wid[pos]], N))
+tf = TF(tco)
+idf = IDF(o_counts[word2wid[pos]], N)
+tfidf = TFIDF(tf, idf)
+TFIDFList.append(tfidf)
