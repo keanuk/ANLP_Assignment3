@@ -30,6 +30,12 @@ def tw_stemmer(word):
   else:
     return STEMMER.stem(word)
 
+def dictToVector(d):
+    vector = []
+    for k, v in sorted(d.items()):
+        vector.append(v)
+    return vector
+
 def PMI(c_xy, c_x, c_y, N):
   '''Compute the pointwise mutual information using cooccurrence counts.
 
@@ -53,30 +59,6 @@ if(PMI(2,4,3,12) != 1): # these numbers are from our y,z example
 else:
     print("PMI check passed")
 
-def TF(c_xy):
-    if (c_xy != 0):
-        return 1 + log(c_xy, 10)
-    else:
-        return 0
-
-def IDF(df, N):
-    return log((N / df))
-
-def TFIDF(tf, idf):
-    return tf * idf
-
-def cos_sim(v0,v1):
-  '''Compute the cosine similarity between two sparse vectors.
-
-  :type v0: dict
-  :type v1: dict
-  :param v0: first sparse vector
-  :param v1: second sparse vector
-  :rtype: float
-  :return: cosine between v0 and v1
-  '''
-  return np.dot(v0, v1) / (np.linalg.norm(v1) * np.linalg.norm(v0))
-
 def cos_sim(v0,v1):
   '''Compute the cosine similarity between two sparse vectors.
 
@@ -92,8 +74,49 @@ def cos_sim(v0,v1):
   # giving the values at those dimensions.
 
   #You will need to replace with the real function
-  print("Warning: cos_sim is incorrectly defined")
-  return 0
+  v0 = dictToVector(v0)
+  v1 = dictToVector(v1)
+  return np.dot(v0, v1) / (np.linalg.norm(v1) * np.linalg.norm(v0))
+
+def cos_sim_list(v0,v1):
+  return np.dot(v0, v1) / (np.linalg.norm(v1) * np.linalg.norm(v0))
+
+def diceMeasure(v0, v1):
+    v0 = dictToVector(v0)
+    v1 = dictToVector(v1)
+    return (2 * len(np.intersect1d(v0, v1))) / (len(v0) + len(v1))
+
+def jaccardMeasure(v0, v1):
+    v0 = dictToVector(v0)
+    v1 = dictToVector(v1)
+    return len(np.intersect1d(v0, v1)) / len(np.union1d(v0, v1))
+
+def buildVectors(word0, word1):
+    d0 = co_counts[word2wid[word0]]
+    d1 = co_counts[word2wid[word1]]
+    
+    counts0 = {}
+    counts1 = {}
+    pmi0 = {}
+    pmi1 = {}
+    
+    index = 0
+    for k0, v0 in sorted(d0.items()):
+        for k1, v1 in sorted(d1.items()):
+            if k0 == k1:
+                #print("Found a key match: ", k0, k1, " with values: ", v0, v1)
+                #print("Checking PMI with c_xy = ", k0)
+                #print("Checking PMI with c_x = ", o_counts[word2wid[word0]])
+                #print("Checking PMI with c_y = ", o_counts[k0])
+                #print("Checking PMI with N = ", N)
+                counts0.update({index:v0})
+                counts1.update({index:v1})
+                pmi0.update({index:PMI(d0[k0], o_counts[word2wid[word0]], o_counts[k0], N)})
+                pmi1.update({index:PMI(d1[k1], o_counts[word2wid[word1]], o_counts[k1], N)})
+                index += 1
+                break
+    return counts0, counts1, pmi0, pmi1
+
 
 def create_ppmi_vectors(wids, o_counts, co_counts, tot_count):
     '''Creates context vectors for the words in wids, using PPMI.
@@ -109,12 +132,14 @@ def create_ppmi_vectors(wids, o_counts, co_counts, tot_count):
     :param tot_count: the total number of observations
     :rtype: dict
     :return: the context vectors, indexed by word id
+
     '''
+
     vectors = {}
     for wid0 in wids:
-        ##you will need to change this
-        vectors[wid0] = {}
-    print("Warning: create_ppmi_vectors is incorrectly defined")
+        for wid1 in wids:
+            if(wid0 != wid1):
+                vectors[wid0] = {wid1:(PMI(co_counts[wid0][wid1], o_counts[wid0], o_counts[wid1], tot_count))}
     return vectors
 
 def read_counts(filename, wids):
@@ -190,7 +215,7 @@ def make_pairs(items):
   return [(x, y) for x in items for y in items if x < y]
 
 
-test_words = ["cat", "dog", "mouse", "computer","@justinbieber"]
+test_words = ["cat", "dog", "mouse", "computer","@justinbieber", "red", "blue"]
 stemmed_words = [tw_stemmer(w) for w in test_words]
 all_wids = set([word2wid[x] for x in stemmed_words]) #stemming might create duplicates; remove them
 
@@ -211,36 +236,53 @@ c_sims = {(wid0,wid1): cos_sim(vectors[wid0],vectors[wid1]) for (wid0,wid1) in w
 print("Sort by cosine similarity")
 print_sorted_pairs(c_sims, o_counts)
 
-def dict2Vect(wDict):
-    v = []
-    lastKey = 0
-    for key, val in wDict.items():
-        if(key == lastKey + 1):
-            v.append(val)
-        else:
-            for i in range(key - lastKey):
-                v.append(0)
-            v.append(val)
-        lastKey = key
-    print("Finished Converting")
-    return v
+def countPMI(count, pmi):
+    vector = []
+    index = 0
+    for key, value in count.items():
+        vector.append(pmi[index] * value)
+        index += 1
+    return vector
 
+def dictionary_to_list(data):
+    result = {}
+    for key, value in data.items():
+        if isinstance(value, list):
+            for index in value:
+                result[index] = key
+        else:
+            result[value] = key
+    return [result[key] for key in sorted(result)]
+
+def list_to_dictionary(data):
+    result = {}
+    for index, char in enumerate(data):
+        result.setdefault(char, [])
+        result[char].append(index)
+    return dict((key, value[0]) if len(value) == 1 else (key, value) for key, value in result.items())
+
+def getWordRank(word):
+    sortedCounts = reversed(dictionary_to_list(o_counts))
+    index = 0
+    for i in sortedCounts:
+        if(i == word2wid[word]):
+            print("Word is ranked at ", index)
+            break
+        index += 1
 
 def wordCompare():
-    v0 = dict2Vect(co_counts[word2wid['@justinbieber']])
-    v1 = dict2Vect(co_counts[word2wid['love']])
-    return cos_sim(v0, v1)
+    c0, c1, pmi0, pmi1 = buildVectors("red", "dog")
 
+    #print("\n\n\nCounts 0:\n\n\n ", c0)
+    #print("\n\n\nCounts 1:\n\n\n ", c1)
+    #print("\n\n\nPMI 0:\n\n\n ", pmi0)
+    #print("\n\n\nPMI 1:\n\n\n ", pmi1)
 
-print("Cosine similarity: ", wordCompare())
+    cpmi0 = countPMI(c0, pmi0)
+    cpmi1 = countPMI(c1, pmi1)
 
-targetid = word2wid[target]
-posTFIDFList = []
+    print("Cosine similarity: ", cos_sim_list(cpmi0, cpmi1))
+    print("Dice measure: ", diceMeasure(c0, c1))
+    print("Jaccard measure: ", jaccardMeasure(c0, c1))
 
-tcoDict = co_counts[targetid]
-tco = tcoDict[word2wid[pos]]
-posPMIs.append(PMI(tco, o_counts[targetid], o_counts[word2wid[pos]], N))
-tf = TF(tco)
-idf = IDF(o_counts[word2wid[pos]], N)
-tfidf = TFIDF(tf, idf)
-TFIDFList.append(tfidf)
+wordCompare()        
