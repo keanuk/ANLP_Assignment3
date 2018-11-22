@@ -244,25 +244,14 @@ def countPMI(count, pmi):
         index += 1
     return vector
 
-def dictionary_to_list(data):
-    result = {}
-    for key, value in data.items():
-        if isinstance(value, list):
-            for index in value:
-                result[index] = key
-        else:
-            result[value] = key
+def dictConvert(dictionary):
+    result = dict((v,k) for k,v in dictionary.items())
     return [result[key] for key in sorted(result)]
-
-def list_to_dictionary(data):
-    result = {}
-    for index, char in enumerate(data):
-        result.setdefault(char, [])
-        result[char].append(index)
-    return dict((key, value[0]) if len(value) == 1 else (key, value) for key, value in result.items())
+        
 
 def getWordRank(word):
-    sortedCounts = reversed(dictionary_to_list(o_counts))
+    word = tw_stemmer(word)
+    sortedCounts = reversed(dictConvert(o_counts))
     index = 0
     for i in sortedCounts:
         if(i == word2wid[word]):
