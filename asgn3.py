@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from math import log;
 from pylab import mean;
+from scipy.stats import spearmanr
 
 STEMMER = PorterStemmer()
 
@@ -59,6 +60,21 @@ if(PMI(2,4,3,12) != 1): # these numbers are from our y,z example
 else:
     print("PMI check passed")
     
+def equalizeDictionaries(d0, d1):
+    tmp = {}
+    for wid, pmi in d0.items():
+        if(wid not in d1):
+            tmp.update({wid: pmi})
+    for key, value in tmp.items():
+        d0.pop(key)
+    tmp = {}
+    for wid, pmi in d1.items():
+        if(wid not in d0):
+            tmp.update({wid: pmi})
+    for key, value in tmp.items():
+        d1.pop(key)
+    return d0, d1
+    
 def cos_sim(v0,v1):
   '''Compute the cosine similarity between two sparse vectors.
 
@@ -71,32 +87,26 @@ def cos_sim(v0,v1):
   '''
   # We recommend that you store the sparse vectors as dictionaries
   # with keys giving the indices of the non-zero entries, and values
-  # giving the values at those dimensions.
-  print("Cosine\n")
-  print(v0)
-  print(v1)
+  # giving the values at those dimensions.  
+  v0, v1 = equalizeDictionaries(v0, v1)
 
   v0 = dictToVector(v0)
   v1 = dictToVector(v1)
     
-  return np.dot(v0, v1) / (np.linalg.norm(v1) * np.linalg.norm(v0))
+  return np.dot(v0, v1) / (np.linalg.norm(v0) * np.linalg.norm(v1))
 
-def diceMeasure(v0, v1):
-    print('\nDice\n')
-    print(v0)
-    print(v1)
-    v0 = dictToVector(v0)
-    v1 = dictToVector(v1)
-    print()
-    print((2 * len(np.intersect1d(v0, v1))) / (len(v0) + len(v1)))
-    return (2 * len(np.intersect1d(v0, v1))) / (len(v0) + len(v1))
+def diceMeasure(v0, v1): 
+    intersection = set()
+    
+    for wid0, count0 in v0.items():
+        for wid1, count1 in v1.items():
+            if(wid0 == wid1):
+                intersection.add(wid0)
+                break
+    
+    return (2 * len(intersection)) / (len(v0) + len(v1))
 
-def jaccardMeasure(v0, v1):
-    print('\nJaccard\n')
-    
-    #v0 = dictToVector(v0)
-    #v1 = dictToVector(v1)
-    
+def jaccardMeasure(v0, v1):        
     intersection = set()
     union = set()
     
@@ -109,9 +119,7 @@ def jaccardMeasure(v0, v1):
             else:
                  union.add(wid0)
                  union.add(wid1)
-    #print("Intersection\n", intersection)
-    #print("\nUnion\n", union)
-    print(len(intersection) / len(union))
+
     return len(intersection) / len(union)
 
 def create_ppmi_vectors(wids, o_counts, co_counts, tot_count):
@@ -133,9 +141,9 @@ def create_ppmi_vectors(wids, o_counts, co_counts, tot_count):
     vectors = {}
     for wid0 in wids:
         temp = {}
-        for wid1 in wids:
-            if(wid0 != wid1):
-                temp.update({wid1:(PMI(co_counts[wid0][wid1], o_counts[wid0], o_counts[wid1], tot_count))})
+        for wid1 in co_counts[wid0]:
+            #if(wid0 != wid1):
+            temp.update({wid1:co_counts[wid0][wid1] * (PMI(co_counts[wid0][wid1], o_counts[wid0], o_counts[wid1], tot_count))})
         vectors[wid0] = temp
     return vectors
 
@@ -159,7 +167,7 @@ def read_counts(filename, wids):
   :param filename: where to read info from
   :param wids: a list of word ids
   :returns: occurence counts, cooccurence counts, and tot number of observations
-  '''
+  '''  
   o_counts = {} # Occurence counts
   co_counts = {} # Cooccurence counts
   fp = open(filename)
@@ -207,7 +215,8 @@ def freq_v_sim(sims):
   plt.xlabel('Min Freq')
   plt.ylabel('Similarity')
   print("Freq vs Similarity Spearman correlation = {:.2f}".format(spearmanr(xs,ys)[0]))
-#  plt.show() #display the set of plots
+  print("P-Value = {:.2f}".format(spearmanr(xs,ys)[1]))
+  plt.show() #display the set of plots
 
 def make_pairs(items):
   '''Takes a list of items and creates a list of the unique pairs
@@ -221,38 +230,75 @@ def make_pairs(items):
   '''
   return [(x, y) for x in items for y in items if x < y]
 
+def newPairs(words):
+    pairs = []
+    for word0, word1 in words.items():
+        pairs.append((word2wid[tw_stemmer(word0)], word2wid[tw_stemmer(word1)]))
+    return pairs
+
+def makeWidSet(wordDict):
+    widSet = set()
+    for w0, w1 in wordDict.items():
+        widSet.add(word2wid[tw_stemmer(w0)])
+        widSet.add(word2wid[tw_stemmer(w1)])
+    return widSet
 
 test_words = ["cat", "dog", "mouse", "computer","@justinbieber"]
+
+similar_words = {'poodle': 'shepherd', 'gala': 'party', 'puppy': 'pet', 'siren': 'mermaid', 'wheat': 'seed', 'occasion': 'reunion', 'fur': 'fox', 'clay': 'wood', 'vegetable': 'tomato', 'autumn': 'spring', 'peach': 'berry', 'wizard': 'magic', 'trail': 'heel', 'tail': 'cat', 'lemon': 'lime', 'lunch': 'dinner', 'pie': 'cake', 'doll': 'toy', 'birth': 'birthday', 'purple': 'blue', 'christmas': 'holiday', 'festival': 'celebration', 'gift': 'present', 'shoe':'hat'}
+dissimilar_words = {'botox': 'volcano', 'pear': 'safari', 'instinct':'miner', 'priest':'passport', 'panther':'wage', 'vegan':'sword', 'corruption':'mouse', 'paranormal':'council', 'professor':'farm', 'election':'coffee', 'boat':'candy', 'lack':'garden', 'speech': 'rocket', 'sea':'intern', 'protest':'pour', 'june':'peace', 'drama':'milk', 'gym':'lol', 'score':'home', 'college':'shrimp', 'honey':'airport', 'violin':'cow', 'prison':'star'}
+moderate_words = {'good':'keyboard', 'happy':'job', 'spoon':'cabinet', 'memory':'dread', 'dream':'deep',
+                  'phone':'chair', 'door':'dog', 'eartquake':'ocean', 'spider':'crime', 'tsunami':'president', 'obama':'email',
+                  'time':'york', 'cereal':'newspaper', 'perfume':'child', 'paparazzi':'court', 'house':'boat', 'roll':'die', 'florida':'knight', 'greece':'flood', 'pasta':'scotland', 'google':'reader', 'twitter':'politics','siri':'friend'}
+allSimilar = makeWidSet(similar_words)
+allDissimilar = makeWidSet(dissimilar_words)
+allModerate = makeWidSet(moderate_words)    
+
 stemmed_words = [tw_stemmer(w) for w in test_words]
 all_wids = set([word2wid[x] for x in stemmed_words]) #stemming might create duplicates; remove them
 
 # you could choose to just select some pairs and add them by hand instead
 # but here we automatically create all pairs 
-wid_pairs = make_pairs(all_wids)        
+wid_pairs = make_pairs(all_wids)
+
+similarPairs = newPairs(similar_words)
+dissimilarPairs = newPairs(dissimilar_words)
+moderatePairs = newPairs(moderate_words)    
 
 #read in the count information
-(o_counts, co_counts, N) = read_counts("/afs/inf.ed.ac.uk/group/teaching/anlp/asgn3/counts", all_wids)
+(o_counts, co_counts, N) = read_counts("/afs/inf.ed.ac.uk/group/teaching/anlp/asgn3/counts", set(list(all_wids) + list(allSimilar) + list(allModerate) + list(allDissimilar)))
 
 #make the word vectors
-vectors = create_ppmi_vectors(all_wids, o_counts, co_counts, N)
-countVectors = getWordCounts(all_wids, o_counts, co_counts, N)
+ppmis = create_ppmi_vectors(all_wids, o_counts, co_counts, N)
 
-# compute cosine similarites for all pairs we consider
-c_sims = {(wid0,wid1): cos_sim(vectors[wid0],vectors[wid1]) for (wid0,wid1) in wid_pairs}
-dice_sims = {(wid0,wid1): diceMeasure(countVectors[wid0],countVectors[wid1]) for (wid0,wid1) in wid_pairs}
-jaccard_sims = {(wid0,wid1): jaccardMeasure(co_counts[wid0], co_counts[wid1]) for (wid0,wid1) in wid_pairs}
+similarPPMIS = create_ppmi_vectors(allSimilar, o_counts, co_counts, N)
+dissimilarPPMIS = create_ppmi_vectors(allDissimilar, o_counts, co_counts, N)
+moderatePPMIS = create_ppmi_vectors(allModerate, o_counts, co_counts, N)
 
-print("Sort by cosine similarity")
-print_sorted_pairs(c_sims, o_counts)
+def findAllSimilarities(o_counts, co_counts, ppmis, pairs, similarity):
+    # compute cosine similarites for all pairs we consider
+    c_sims = {(wid0,wid1): cos_sim(ppmis[wid0],ppmis[wid1]) for (wid0,wid1) in pairs}
+    dice_sims = {(wid0,wid1): diceMeasure(co_counts[wid0],co_counts[wid1]) for (wid0,wid1) in pairs}
+    jaccard_sims = {(wid0,wid1): jaccardMeasure(co_counts[wid0], co_counts[wid1]) for (wid0,wid1) in pairs}
+    
+    print("============================" + similarity + "===========================")
+    print("Sort by cosine similarity")
+    print_sorted_pairs(c_sims, o_counts)
+    freq_v_sim(c_sims)
+    
+    print("\nSort by dice similarity")
+    print_sorted_pairs(dice_sims, o_counts)
+    freq_v_sim(dice_sims)
+    
+    print("\nSort by Jaccard similarity")
+    print_sorted_pairs(jaccard_sims, o_counts)
+    freq_v_sim(jaccard_sims)
+    
 
-print("\nSort by dice similarity")
-print_sorted_pairs(dice_sims, o_counts)
-
-print("\nSort by Jaccard similarity")
-print_sorted_pairs(jaccard_sims, o_counts)
-
-
-
+findAllSimilarities(o_counts, co_counts, ppmis, wid_pairs, 'OG TEST WORDS')
+findAllSimilarities(o_counts, co_counts, similarPPMIS, similarPairs, 'SIMILAR WORDS')
+findAllSimilarities(o_counts, co_counts, dissimilarPPMIS, dissimilarPairs, 'DISSIMILAR WORDS')
+findAllSimilarities(o_counts, co_counts, moderatePPMIS, moderatePairs, 'MODERATELY SIMILAR WORDS')
 
 ############################################################
 def dictConvert(dictionary):
